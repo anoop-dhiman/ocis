@@ -208,12 +208,12 @@ func (b *Bleve) Search(ctx context.Context, sir *searchService.SearchIndexReques
 			Score: float32(hit.Score),
 			Entity: &searchMessage.Entity{
 				Ref: &searchMessage.Reference{
-					ResourceId: resourceIDtoSearchID(rootID),
+					ResourceId: resourceIDtoSearchID(&rootID),
 					Path:       getFieldValue[string](hit.Fields, "Path"),
 				},
-				Id:         resourceIDtoSearchID(rID),
+				Id:         resourceIDtoSearchID(&rID),
 				Name:       getFieldValue[string](hit.Fields, "Name"),
-				ParentId:   resourceIDtoSearchID(pID),
+				ParentId:   resourceIDtoSearchID(&pID),
 				Size:       uint64(getFieldValue[float64](hit.Fields, "Size")),
 				Type:       uint64(getFieldValue[float64](hit.Fields, "Type")),
 				MimeType:   getFieldValue[string](hit.Fields, "MimeType"),
