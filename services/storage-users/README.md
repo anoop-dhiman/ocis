@@ -228,3 +228,115 @@ Store specific notes:
   -   When using `redis-sentinel`, the Redis master to use is configured via e.g. `OCIS_CACHE_STORE_NODES` in the form of `<sentinel-host>:<sentinel-port>/<redis-master>` like `10.10.0.200:26379/mymaster`.
   -   When using `nats-js-kv` it is recommended to set `OCIS_CACHE_STORE_NODES` to the same value as `OCIS_EVENTS_ENDPOINT`. That way the cache uses the same nats instance as the event bus.
   -   When using the `nats-js-kv` store, it is possible to set `OCIS_CACHE_DISABLE_PERSISTENCE` to instruct nats to not persist cache data on disc.
+
+## Encrypted Storage
+
+The `storage-users` service supports encryption of blob data using AES-256-GCM encryption. This feature provides an additional layer of security for stored files by encrypting the actual file content while keeping metadata accessible for normal operations.
+
+### Encryption Overview
+
+The encryption system uses a two-tier key approach:
+- **Master Key**: A 32-byte key used to encrypt meta-keys for each blob
+- **Meta-Key**: A randomly generated 32-byte key for each blob, encrypted with the master key
+- **Derived Key**: A key derived from the meta-key and blob ID for encrypting the actual file content
+
+This design ensures that:
+- Each blob has its own unique encryption key
+- The master key never directly encrypts file content
+- Compromise of one blob's key doesn't affect other blobs
+- File content is encrypted in chunks for efficient processing
+
+### Supported Storage Drivers
+
+Encryption is available for the following storage drivers:
+
+- **`ocis_encrypted`**: Encrypted local filesystem storage
+- **`s3ng_encrypted`**: Encrypted S3-compatible object storage
+
+### Configuration
+
+To enable encryption, you need to configure the following environment variables:
+
+#### Required Configuration
+
+- **`STORAGE_USERS_ENCRYPTION_KEY`** (string, required when encryption is enabled)
+  - A 32-byte key encoded in base64 format
+  - This is the master key used for encrypting meta-keys
+  - **IMPORTANT**: Keep this key secure and consistent across all service instances
+  - **WARNING**: Changing this key will make existing encrypted files inaccessible
+
+#### Storage Driver Configuration
+
+**For `ocis_encrypted` driver:**
+```bash
+STORAGE_USERS_DRIVER=ocis_encrypted
+STORAGE_USERS_ENCRYPTION_KEY=Yl8dech9lzfEyKYgcw8GnWffdqKqeestqf5f2gq0cQI=
+```
+
+**For `s3ng_encrypted` driver:**
+```bash
+STORAGE_USERS_DRIVER=s3ng_encrypted
+STORAGE_USERS_ENCRYPTION_KEY=Yl8dech9lzfEyKYgcw8GnWffdqKqeestqf5f2gq0cQI=
+STORAGE_USERS_S3NG_ENDPOINT=http://localhost:9000
+STORAGE_USERS_S3NG_REGION=default
+STORAGE_USERS_S3NG_ACCESS_KEY=your-access-key
+STORAGE_USERS_S3NG_SECRET_KEY=your-secret-key
+STORAGE_USERS_S3NG_BUCKET=your-bucket-name
+```
+
+### Generating Encryption Keys
+
+You can generate a secure 32-byte encryption key using the following command:
+
+```bash
+# Generate a random 32-byte key and encode it in base64
+openssl rand -base64 32
+```
+
+Example output:
+```
+Yl8dech9lzfEyKYgcw8GnWffdqKqeestqf5f2gq0cQI=
+```
+
+### Security Considerations
+
+1. **Key Management**: Store the encryption key securely using environment variables, secret management systems, or secure configuration files. Never hardcode the key in source code.
+
+2. **Key Rotation**: The current implementation doesn't support automatic key rotation. To change the encryption key, you would need to:
+   - Decrypt all existing files with the old key
+   - Re-encrypt them with the new key
+   - Update the configuration
+
+3. **Backup**: Ensure you have secure backups of your encryption key. Loss of the key means permanent loss of access to encrypted files.
+
+4. **Performance**: Encryption adds computational overhead, especially for large files. The system processes files in 1MB chunks to balance security and performance.
+
+5. **Compatibility**: Encrypted storage is not compatible with non-encrypted storage drivers. You cannot switch between encrypted and non-encrypted drivers for the same data.
+
+### Migration Considerations
+
+- **From non-encrypted to encrypted**: Existing files will remain unencrypted. Only new uploads will be encrypted.
+- **From encrypted to non-encrypted**: This is not supported as it would require decrypting all files, which is not currently implemented.
+
+### Troubleshooting
+
+- **"encryption is enabled but no encryption key provided"**: Ensure `STORAGE_USERS_ENCRYPTION_KEY` is set
+- **"encryption key must be 32 bytes"**: Verify that your base64-encoded key decodes to exactly 32 bytes
+- **Access denied to encrypted files**: Verify that the encryption key is consistent across all service instances
+
+### Example Configuration
+
+Here's a complete example for setting up encrypted S3 storage:
+
+```bash
+# Environment variables for encrypted S3 storage
+export STORAGE_USERS_DRIVER=s3ng_encrypted
+export STORAGE_USERS_ENCRYPTION_KEY=Yl8dech9lzfEyKYgcw8GnWffdqKqeestqf5f2gq0cQI=
+export STORAGE_USERS_S3NG_ENDPOINT=http://localhost:9000
+export STORAGE_USERS_S3NG_REGION=default
+export STORAGE_USERS_S3NG_ACCESS_KEY=ocis
+export STORAGE_USERS_S3NG_SECRET_KEY=ocis-secret-key
+export STORAGE_USERS_S3NG_BUCKET=ocis-bucket
+```
+
+This configuration will store all file content encrypted in S3 while maintaining normal file operations through the Infinite Scale interface.

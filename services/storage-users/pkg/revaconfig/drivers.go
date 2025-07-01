@@ -380,3 +380,15 @@ func S3NGNoEvents(cfg *config.Config) map[string]interface{} {
 		},
 	}
 }
+
+// OcisEncrypted is the config mapping for the ocis storage driver with encryption
+func OcisEncrypted(cfg *config.Config, ocis map[string]interface{}) map[string]interface{} {
+	ocis["encryption_key"] = cfg.Drivers.OCIS.EncryptionKey
+	return ocis
+}
+
+// S3NGEncrypted is the config mapping for the s3ng storage driver with encryption
+func S3NGEncrypted(cfg *config.Config, s3ng map[string]interface{}) map[string]interface{} {
+	s3ng["encryption_key"] = cfg.Drivers.S3NG.EncryptionKey
+	return s3ng
+}

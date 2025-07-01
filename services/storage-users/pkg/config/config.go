@@ -137,6 +137,7 @@ type OCISDriver struct {
 	AsyncUploads            bool   `yaml:"async_uploads" env:"OCIS_ASYNC_UPLOADS" desc:"Enable asynchronous file uploads." introductionVersion:"pre5.0"`
 	MaxQuota                uint64 `yaml:"max_quota" env:"OCIS_SPACES_MAX_QUOTA;STORAGE_USERS_OCIS_MAX_QUOTA" desc:"Set a global max quota for spaces in bytes. A value of 0 equals unlimited. If not using the global OCIS_SPACES_MAX_QUOTA, you must define the FRONTEND_MAX_QUOTA in the frontend service." introductionVersion:"pre5.0"`
 	DisableVersioning       bool   `yaml:"disable_versioning" env:"OCIS_DISABLE_VERSIONING" desc:"Disables versioning of files. When set to true, new uploads with the same filename will overwrite existing files instead of creating a new version." introductionVersion:"7.0.0"`
+	EncryptionKey           string `yaml:"encryption_key" env:"STORAGE_USERS_ENCRYPTION_KEY" desc:"The Base64 encoded 32-byte key used for AES-256-GCM encryption of blob data. Required when using encrypted blobstores." introductionVersion:"7.0.0"`
 }
 
 // S3NGDriver is the storage driver configuration when using 's3ng' storage driver
@@ -172,6 +173,7 @@ type S3NGDriver struct {
 	LockCycleDurationFactor int    `yaml:"lock_cycle_duration_factor" env:"STORAGE_USERS_S3NG_LOCK_CYCLE_DURATION_FACTOR" desc:"When trying to lock files, ocis will multiply the cycle with this factor and use it as a millisecond timeout. Values of 0 or below will be ignored and the default value of 30 will be used." introductionVersion:"pre5.0"`
 	MaxConcurrency          int    `yaml:"max_concurrency" env:"OCIS_MAX_CONCURRENCY;STORAGE_USERS_S3NG_MAX_CONCURRENCY" desc:"Maximum number of concurrent go-routines. Higher values can potentially get work done faster but will also cause more load on the system. Values of 0 or below will be ignored and the default value of 100 will be used." introductionVersion:"pre5.0"`
 	DisableVersioning       bool   `yaml:"disable_versioning" env:"OCIS_DISABLE_VERSIONING" desc:"Disables versioning of files. When set to true, new uploads with the same filename will overwrite existing files instead of creating a new version." introductionVersion:"7.0.0"`
+	EncryptionKey           string `yaml:"encryption_key" env:"STORAGE_USERS_ENCRYPTION_KEY" desc:"The Base64 encoded 32-byte key used for AES-256-GCM encryption of blob data. Required when using encrypted blobstores." introductionVersion:"7.0.0"`
 }
 
 // OwnCloudSQLDriver is the storage driver configuration when using 'owncloudsql' storage driver
