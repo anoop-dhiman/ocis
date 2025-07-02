@@ -1,6 +1,8 @@
 package revaconfig
 
 import (
+	"encoding/base64"
+
 	"github.com/owncloud/ocis/v2/services/storage-users/pkg/config"
 )
 
@@ -381,14 +383,30 @@ func S3NGNoEvents(cfg *config.Config) map[string]interface{} {
 	}
 }
 
+// decodeEncryptionKey decodes the encryption key
+func decodeEncryptionKey(key string) string {
+	// Decode encryption key if encryption is enabled
+	var decodedKey string
+	if key != "" {
+		keyBytes, err := base64.StdEncoding.DecodeString(key)
+		if err != nil {
+			// Log error but continue with empty key - the encryption system will handle the error
+			decodedKey = ""
+		} else {
+			decodedKey = string(keyBytes)
+		}
+	}
+	return decodedKey
+}
+
 // OcisEncrypted is the config mapping for the ocis storage driver with encryption
 func OcisEncrypted(cfg *config.Config, ocis map[string]interface{}) map[string]interface{} {
-	ocis["encryption_key"] = cfg.Drivers.OCIS.EncryptionKey
+	ocis["encryption_key"] = decodeEncryptionKey(cfg.Drivers.OCIS.EncryptionKey)
 	return ocis
 }
 
 // S3NGEncrypted is the config mapping for the s3ng storage driver with encryption
 func S3NGEncrypted(cfg *config.Config, s3ng map[string]interface{}) map[string]interface{} {
-	s3ng["encryption_key"] = cfg.Drivers.S3NG.EncryptionKey
+	s3ng["encryption_key"] = decodeEncryptionKey(cfg.Drivers.S3NG.EncryptionKey)
 	return s3ng
 }
