@@ -38,6 +38,12 @@ func DefaultConfig() *config.Config {
 			Bleve: config.EngineBleve{
 				Datapath: filepath.Join(defaults.BaseDataPath(), "search"),
 			},
+			Elasticsearch: config.EngineElasticsearch{
+				Addresses: []string{"http://127.0.0.1:9200"},
+				Username:  "elastic",
+				Password:  "elastic",
+				IndexName: "ocis-search",
+			},
 		},
 		Extractor: config.Extractor{
 			Type:             "basic",

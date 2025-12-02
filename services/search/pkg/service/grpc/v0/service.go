@@ -32,6 +32,7 @@ import (
 	"github.com/owncloud/ocis/v2/services/search/pkg/engine"
 	bleveEngine "github.com/owncloud/ocis/v2/services/search/pkg/engine/bleve"
 	"github.com/owncloud/ocis/v2/services/search/pkg/query/bleve"
+	"github.com/owncloud/ocis/v2/services/search/pkg/query/elasticsearch"
 	"github.com/owncloud/ocis/v2/services/search/pkg/search"
 )
 
@@ -63,7 +64,12 @@ func NewHandler(opts ...Option) (searchsvc.SearchProviderHandler, func(), error)
 			_ = bleveEngine.Close()
 		}
 		eng = bleveEngine
-
+	case "elasticsearch":
+		var err error
+		eng, err = engine.NewElasticSearchEngine(cfg.Engine.Elasticsearch, elasticsearch.DefaultCreator)
+		if err != nil {
+			return nil, teardown, err
+		}
 	default:
 		return nil, teardown, fmt.Errorf("unknown search engine: %s", cfg.Engine.Type)
 	}

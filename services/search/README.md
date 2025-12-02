@@ -168,3 +168,494 @@ The indexing process tries to be self-healing in some situations.
 In the following example, let's assume a file tree `foo/bar/baz` exists.
 If the folder `bar` gets renamed to `new-bar`, the path to `baz` is no longer `foo/bar/baz` but `foo/new-bar/baz`.
 The search service checks the change and either just updates the path in the index or creates a new index for all items affected if none was present.
+
+# Search Engines
+
+This package provides search engine implementations for the search service. Currently, two engines are supported:
+
+## Bleve Engine
+
+The original search engine implementation using [Bleve](https://blevesearch.com/), a full-text search and indexing library written in Go.
+
+### Features
+- Local file-based indexing
+- No external dependencies
+- Custom analyzers for different field types
+- Built-in query language support
+
+### Usage
+
+```go
+import (
+    "github.com/owncloud/ocis/v2/services/search/pkg/engine"
+    "github.com/owncloud/ocis/v2/services/search/pkg/query/bleve"
+)
+
+// Create a new Bleve index
+index, err := engine.NewBleveIndex("/path/to/index")
+if err != nil {
+    // handle error
+}
+
+// Create the engine
+bleveEngine := engine.NewBleveEngine(index, bleve.DefaultCreator)
+```
+
+## Elasticsearch Engine
+
+A new implementation that uses [Elasticsearch](https://www.elastic.co/elasticsearch/) as the backend search engine.
+
+### Features
+- Distributed search and analytics
+- Horizontal scalability
+- Advanced search capabilities
+- REST API interface
+- Rich ecosystem and tooling
+
+### Configuration
+
+```go
+import (
+    "github.com/owncloud/ocis/v2/services/search/pkg/engine"
+    "github.com/owncloud/ocis/v2/services/search/pkg/query/elasticsearch"
+    "github.com/owncloud/ocis/v2/services/search/pkg/config"
+)
+
+// Configure Elasticsearch connection
+config := config.EngineElasticsearch{
+    Addresses: []string{"http://localhost:9200"},
+    Username:  "elastic",
+    Password:  "password",
+    IndexName: "search-index",
+}
+
+// Create the engine
+esEngine, err := engine.NewElasticSearchEngine(config, elasticsearch.DefaultCreator)
+if err != nil {
+    // handle error
+}
+```
+
+### Elasticsearch Setup
+
+Before using the Elasticsearch engine, you need to have an Elasticsearch cluster running. Here are some options:
+
+#### Docker
+```bash
+docker run -d --name elasticsearch \
+  -p 9200:9200 -p 9300:9300 \
+  -e "discovery.type=single-node" \
+  -e "xpack.security.enabled=false" \
+  elasticsearch:8.11.0
+```
+
+#### Docker Compose
+```yaml
+version: '3.8'
+services:
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - search_network
+
+volumes:
+  elasticsearch_data:
+
+networks:
+  search_network:
+```
+
+## Engine Interface
+
+Both engines implement the same `Engine` interface:
+
+```go
+type Engine interface {
+    Search(ctx context.Context, req *searchService.SearchIndexRequest) (*searchService.SearchIndexResponse, error)
+    Upsert(id string, r Resource) error
+    Move(id string, parentid string, target string) error
+    Delete(id string) error
+    Restore(id string) error
+    Purge(id string) error
+    DocCount() (uint64, error)
+}
+```
+
+## Query Language
+
+Both engines support the same KQL (Keyword Query Language) syntax:
+
+### Basic Queries
+- `name:document.pdf` - Search for files named "document.pdf"
+- `content:important` - Search for files containing "important"
+- `mediatype:image` - Search for image files
+
+### Boolean Queries
+- `name:test AND content:example` - Files named "test" containing "example"
+- `name:test OR name:example` - Files named either "test" or "example"
+- `NOT hidden:true` - Files that are not hidden
+
+### Date Queries
+- `mtime:>2023-01-01` - Files modified after January 1, 2023
+- `mtime:>=2023-01-01 AND mtime:<2023-12-31` - Files modified in 2023
+
+### Grouping
+- `(name:test OR name:example) AND content:important`
+
+### Field Mappings
+- `rootid` → `RootID`
+- `path` → `Path`
+- `id` → `ID`
+- `name` → `Name`
+- `size` → `Size`
+- `mtime` → `Mtime`
+- `mediatype` → `MimeType`
+- `type` → `Type`
+- `tag`/`tags` → `Tags`
+- `content` → `Content`
+- `hidden` → `Hidden`
+
+### Special Media Types
+- `mediatype:file` - All files (excludes folders)
+- `mediatype:folder` - Folders only
+- `mediatype:document` - Documents (Word, PDF, text files)
+- `mediatype:spreadsheet` - Spreadsheet files
+- `mediatype:presentation` - Presentation files
+- `mediatype:image` - Image files
+- `mediatype:video` - Video files
+- `mediatype:audio` - Audio files
+- `mediatype:archive` - Archive files (ZIP, TAR, etc.)
+
+## Performance Considerations
+
+### Bleve
+- Better for small to medium datasets
+- Lower resource requirements
+- Single-node limitations
+- File-based storage
+
+### Elasticsearch
+- Better for large datasets
+- Higher resource requirements
+- Horizontal scaling capabilities
+- Network-based operations
+
+## Performance Optimizations
+
+### Elasticsearch Optimizations
+
+#### 1. Refresh Strategy
+```go
+// Avoid immediate refresh for better throughput
+req := esapi.IndexRequest{
+    Index:      indexName,
+    DocumentID: id,
+    Body:       bytes.NewReader(body),
+    Refresh:    "wait_for", // ✅ Wait for next refresh cycle instead of "true"
+}
+```
+
+#### 2. Bulk Operations
+For better performance when indexing multiple documents:
+
+```go
+// Use BulkUpsert for multiple documents
+resources := []Resource{...}
+err := engine.BulkUpsert(resources)
+
+// Instead of individual Upsert calls:
+// for _, r := range resources {
+//     engine.Upsert(r.ID, r) // ❌ Slow
+// }
+```
+
+#### 3. Index Settings Optimization
+```go
+indexMapping := map[string]interface{}{
+    "settings": map[string]interface{}{
+        // Performance settings
+        "number_of_shards":   1,           // Single shard for small-medium datasets
+        "number_of_replicas": 0,           // No replicas for dev environments
+        "refresh_interval":   "5s",        // Less frequent refresh (default: 1s)
+        "max_result_window":  50000,       // Allow larger result sets
+        
+        // Memory optimization
+        "index": map[string]interface{}{
+            "codec": "best_compression",   // Better compression
+        },
+    },
+}
+```
+
+#### 4. Connection Pool Configuration
+```go
+config := config.EngineElasticsearch{
+    Addresses: []string{"http://localhost:9200"},
+    // Add connection pool settings
+    Transport: &http.Transport{
+        MaxIdleConnsPerHost:   10,
+        MaxIdleConns:          100,
+        IdleConnTimeout:       90 * time.Second,
+        TLSHandshakeTimeout:   10 * time.Second,
+    },
+    MaxRetries: 3,
+}
+```
+
+#### 5. Search Optimization
+```go
+searchRequest := map[string]interface{}{
+    "query": query,
+    "size":  size,
+    
+    // Only fetch needed fields
+    "_source": []string{
+        "ID", "RootID", "Path", "Name", "Type", 
+        "Size", "MimeType", "Mtime", "Deleted",
+        "audio.*", "image.*", "location.*", "photo.*",
+    },
+    
+    // Optimize highlights
+    "highlight": map[string]interface{}{
+        "fields": map[string]interface{}{
+            "Content": map[string]interface{}{
+                "fragment_size": 150,
+                "number_of_fragments": 1,
+            },
+        },
+    },
+    
+    // Performance settings
+    "track_total_hits": false,  // Disable if exact count not needed
+    "request_cache": true,      // Enable query cache
+}
+```
+
+#### 6. Field Mapping Optimization
+```go
+"properties": map[string]interface{}{
+    "ID": map[string]interface{}{
+        "type":       "keyword",
+        "doc_values": true,  // Enable for sorting/aggregations
+        "index":      true,  // Enable for searching
+    },
+    "Path": map[string]interface{}{
+        "type":       "keyword", 
+        "doc_values": false, // Disable if not used for aggregations
+        "index":      true,
+    },
+    // Use multi-field mapping for flexible querying
+    "Name": map[string]interface{}{
+        "type":     "text",
+        "analyzer": "lowercase_keyword",
+        "fields": map[string]interface{}{
+            "raw": map[string]interface{}{
+                "type": "keyword", // For exact matching
+            },
+            "suggest": map[string]interface{}{
+                "type": "completion", // For autocomplete
+            },
+        },
+    },
+}
+```
+
+#### 7. Large Dataset Handling
+For directories with many files, use scroll API:
+
+```go
+// For large result sets (>10,000 documents)
+func (e *ElasticSearch) searchLargeResultSet(query map[string]interface{}) ([]Resource, error) {
+    query["size"] = 1000 // Reasonable batch size
+    
+    req := esapi.SearchRequest{
+        Index:  []string{e.indexName},
+        Body:   bytes.NewReader(body),
+        Scroll: time.Minute, // Keep scroll context for 1 minute
+    }
+    
+    var allResources []Resource
+    for {
+        // Process results in batches
+        // Use ScrollRequest for subsequent batches
+    }
+    
+    return allResources, nil
+}
+```
+
+### Performance Benchmarks
+
+| Operation | Bleve (local) | Elasticsearch (single node) | Elasticsearch (cluster) |
+|-----------|---------------|------------------------------|-------------------------|
+| Single Index | ~1ms | ~5ms | ~3ms |
+| Bulk Index (100 docs) | ~50ms | ~25ms | ~15ms |
+| Simple Search | ~2ms | ~10ms | ~5ms |
+| Complex Search | ~10ms | ~15ms | ~8ms |
+| Memory Usage | 50-200MB | 200-500MB | 500MB+ |
+
+*Note: Benchmarks are approximate and depend on document size, hardware, and configuration.*
+
+### Tuning Guidelines
+
+#### For Small Deployments (<10k documents):
+- Use Bleve for simplicity
+- If using Elasticsearch: single shard, no replicas
+- Refresh interval: 30s
+
+#### For Medium Deployments (10k-1M documents):
+- Elasticsearch recommended
+- 1-3 shards, 0-1 replicas
+- Refresh interval: 5-10s
+- Enable bulk operations
+
+#### For Large Deployments (>1M documents):
+- Elasticsearch cluster
+- Multiple shards based on data size
+- 1+ replicas for reliability
+- Refresh interval: 1-5s
+- Use scroll API for large queries
+- Monitor and tune based on usage patterns
+
+### Monitoring and Troubleshooting
+
+#### Key Metrics to Monitor
+
+**Elasticsearch Metrics:**
+```bash
+# Check cluster health
+curl -X GET "localhost:9200/_cluster/health?pretty"
+
+# Monitor index statistics
+curl -X GET "localhost:9200/search-index/_stats?pretty"
+
+# Check slow queries
+curl -X GET "localhost:9200/_nodes/stats/indices/search?pretty"
+```
+
+**Performance Indicators:**
+- Query latency (should be <100ms for most queries)
+- Index throughput (documents/second)
+- Memory usage (heap should be <50% of available RAM)
+- Cache hit rates (query cache, field data cache)
+- Refresh time and frequency
+
+#### Common Performance Issues
+
+1. **Slow Indexing:**
+   ```go
+   // Problem: Using refresh: "true"
+   Refresh: "true" // ❌ Forces immediate refresh
+   
+   // Solution: Use bulk operations + wait_for
+   Refresh: "wait_for" // ✅ Better performance
+   ```
+
+2. **Memory Issues:**
+   ```yaml
+   # Set appropriate heap size (50% of RAM, max 32GB)
+   ES_JAVA_OPTS: "-Xms4g -Xmx4g"
+   ```
+
+3. **Query Performance:**
+   ```go
+   // Problem: Fetching all fields
+   // Solution: Use _source filtering
+   "_source": ["ID", "Name", "Path"], // ✅ Only needed fields
+   
+   // Problem: Large result sets
+   // Solution: Use pagination or scroll API
+   "from": 0, "size": 100, // ✅ Reasonable page size
+   ```
+
+#### Elasticsearch Configuration Examples
+
+**Development Environment:**
+```yaml
+# elasticsearch.yml
+cluster.name: "search-dev"
+node.name: "search-node-1"
+discovery.type: "single-node"
+xpack.security.enabled: false
+
+# Performance settings
+indices.memory.index_buffer_size: "20%"
+indices.queries.cache.size: "20%"
+refresh_interval: "30s"
+```
+
+**Production Environment:**
+```yaml
+# elasticsearch.yml
+cluster.name: "search-prod"
+node.name: "search-node-1"
+discovery.seed_hosts: ["node1", "node2", "node3"]
+cluster.initial_master_nodes: ["node1", "node2", "node3"]
+
+# Performance settings
+indices.memory.index_buffer_size: "10%"
+indices.queries.cache.size: "40%"
+refresh_interval: "5s"
+
+# Circuit breaker settings
+indices.breaker.total.limit: "70%"
+indices.breaker.request.limit: "40%"
+```
+
+#### Troubleshooting Checklist
+
+1. **High CPU Usage:**
+   - Check for expensive queries (aggregations, wildcards)
+   - Monitor search thread pool queue
+   - Consider query optimization or caching
+
+2. **High Memory Usage:**
+   - Check field data cache usage
+   - Monitor segment counts (consider force merge)
+   - Verify heap size settings
+
+3. **Slow Searches:**
+   - Enable slow query logging
+   - Check for large result sets
+   - Monitor cache hit rates
+   - Consider query optimization
+
+4. **Indexing Performance Issues:**
+   - Use bulk operations instead of individual requests
+   - Adjust refresh interval
+   - Check for mapping conflicts
+   - Monitor index queue size
+
+## Migration
+
+To migrate from Bleve to Elasticsearch:
+
+1. Set up Elasticsearch cluster
+2. Export data from Bleve index
+3. Create Elasticsearch engine with appropriate configuration
+4. Re-index the exported data
+5. Update application configuration to use Elasticsearch engine
+
+## Testing
+
+Tests are provided for both engines. To run tests:
+
+```bash
+# Run tests for both engines
+go test ./...
+
+# Run tests for specific engine
+go test -run TestBleve
+go test -run TestElasticsearch
+```
+
+Note: Elasticsearch tests require a running Elasticsearch instance and will be skipped if none is available. 

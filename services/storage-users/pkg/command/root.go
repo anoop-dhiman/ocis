@@ -6,6 +6,8 @@ import (
 	"github.com/owncloud/ocis/v2/ocis-pkg/clihelper"
 	"github.com/owncloud/ocis/v2/services/storage-users/pkg/config"
 	"github.com/urfave/cli/v2"
+
+	_ "github.com/owncloud/ocis/v2/services/storage-users/pkg/encryption"
 )
 
 // GetCommands provides all commands for this service

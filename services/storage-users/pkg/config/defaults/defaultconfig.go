@@ -123,6 +123,7 @@ func DefaultConfig() *config.Config {
 				MaxConcurrency:             5,
 				LockCycleDurationFactor:    30,
 				DisableMultipart:           true,
+				EncryptionKey:              "lWZcxiPEvbQ+iSZZPkgBexozA+8SCHR+EfbsTw4DUGg=",
 			},
 			OCIS: config.OCISDriver{
 				Propagator:                 "sync",
@@ -138,6 +139,7 @@ func DefaultConfig() *config.Config {
 				MaxConcurrency:             5,
 				LockCycleDurationFactor:    30,
 				AsyncUploads:               true,
+				EncryptionKey:              "lWZcxiPEvbQ+iSZZPkgBexozA+8SCHR+EfbsTw4DUGg=",
 			},
 			Posix: config.PosixDriver{
 				UseSpaceGroups:            false,

@@ -38,7 +38,7 @@ type Resource struct {
 	Hidden   bool
 }
 
-func resourceIDtoSearchID(id storageProvider.ResourceId) *searchMessage.ResourceID {
+func resourceIDtoSearchID(id *storageProvider.ResourceId) *searchMessage.ResourceID {
 	return &searchMessage.ResourceID{
 		StorageId: id.GetStorageId(),
 		SpaceId:   id.GetSpaceId(),
